@@ -10,33 +10,24 @@ The GUI includes smooth car movement, turning animation, glow effects, and a mod
 
 ---
 
-## Project Structure  
+src/
+│   ├── __init__.py        # Declares src as a Python package
+│   ├── grid.py            # Grid loading, validation, and walkability logic
+│   ├── gui.py             # Tkinter-based GUI with animations and visual effects
+│   ├── pathfinding.py     # BFS implementation for shortest path calculation
+│   ├── levels.py          # Definitions of all maze levels (2D grid format)
+│   └── main.py            # Application entry point (GUI or text mode)
 
-src/  
-│   ├── __init__.py          # Makes src a Python package  
-│   ├── grid.py              # Grid loading, walkability checks, start/goal detection  
-│   ├── gui.py               # Neon GUI with car movement, glow effects, animations  
-│   ├── pathfinding.py       # BFS shortest‑path algorithm  
-│   ├── levels.py            # All 5 maze levels stored as 2D lists  
-│   └── main.py              # Entry point (launches GUI or text mode)  
+tests/
+│   ├── conftest.py        # Configures import paths for testing
+│   ├── test_grid.py       # Unit tests for grid functionality
+│   ├── test_levels.py     # Validation tests for level data
+│   └── test_pathfinding.py# Tests for BFS pathfinding correctness
 
-tests/  
-│   ├── conftest.py          # Ensures src/ is importable during pytest  
-│   ├── test_grid.py         # Tests for grid behaviour  
-│   ├── test_levels.py       # Tests for level validity  
-│   └── test_pathfinding.py  # Tests for BFS pathfinding  
+docs/
+│   └── README.md          # Project documentation
 
-docs/  
-│   └── README.md            # Documentation (this file)  
+examples/
+│   └── Additional maze layout examples
 
-examples/  
-│   └── Additional maze layout examples  
-
-run_all_tests.py             # Helper script to run all tests  
-
----
-
-## Running the Game  
-
-### GUI Mode (Neon Tkinter Interface)  
-From the project root:  
+run_all_tests.py           # Script to execute all test suites

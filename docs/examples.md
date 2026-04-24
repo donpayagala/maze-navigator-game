@@ -3,7 +3,7 @@
 This folder contains example maze levels used by the Maze Navigator game.
 
 Each file is a plain-text grid using:
-- # = wall
+ # = wall
 - . = floor
 - S = start position
 - G = goal position
