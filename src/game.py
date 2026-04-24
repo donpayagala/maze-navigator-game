@@ -1,6 +1,6 @@
 from src.grid import get_level, find_start_and_goal, is_walkable
 from src.pathfinding import find_path
-
+from src.levels import LEVELS
 
 def show(grid, player):
     for r, row in enumerate(grid):
@@ -16,7 +16,6 @@ def move(grid, player, key):
 
 
 def run_text_game():
-    from src.levels import LEVELS
 
     for i in range(len(LEVELS)):
         grid = get_level(i)

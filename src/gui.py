@@ -7,43 +7,29 @@ except ImportError:
     winsound = None
 
 from src.grid import get_level, find_start_and_goal, is_walkable
-from src.pathfinding import find_path
 from src.levels import LEVELS
+from src.pathfinding import find_path
 
-CELL = 40  # big, arcade-style tiles
+
+CELL = 40
+WINDOW_SIZE = "1400x900"
+HELP_TEXT = "Use W A S D to move | P for path | Q to quit"
+
+MOVES = {"w": (-1, 0), "s": (1, 0), "a": (0, -1), "d": (0, 1)}
 
 THEME = {
-    "dark": "#000000",
     "bg": "#050816",
     "header_bg": "#050816",
     "header_fg": "#39FF14",
-    "wall_base": "#0F0F0F",
-    "wall_glow": "#17181B",
+    "wall": "#111111",
     "floor": "#B8C1D7",
     "start": "#00E676",
     "goal": "#FF1744",
-    "path": "#2C2323",
+    "path": "#FFD54F",
     "player": "#00B0FF",
-    "player_roof": "#80d8ff",
+    "roof": "#80D8FF",
+    "error": "#FF5252",
 }
-
-
-def hex_to_rgb(h):
-    h = h.lstrip("#")
-    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-
-
-def rgb_to_hex(r, g, b):
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def mix_color(c1, c2, alpha):
-    r1, g1, b1 = hex_to_rgb(c1)
-    r2, g2, b2 = hex_to_rgb(c2)
-    r = int(r1 + (r2 - r1) * alpha)
-    g = int(g1 + (g2 - g1) * alpha)
-    b = int(b1 + (b2 - b1) * alpha)
-    return rgb_to_hex(r, g, b)
 
 
 class MazeGUI:
@@ -51,189 +37,213 @@ class MazeGUI:
         self.root = root
         self.level = 0
         self.completed = 0
-        self.direction = "d"
-        self.wall_phase = 0.0
-        self.load_level()
+        self.path = []
 
-        self.root.geometry("1400x900")
-        self.root.configure(bg=THEME["bg"])
-        self.root.title("Maze Navigator")
+        # Window setup
+        root.title("Maze Navigator")
+        root.geometry(WINDOW_SIZE)
+        root.configure(bg=THEME["bg"])
 
+        # Header showing level progress
         self.header = tk.Label(
             root,
-            text=self.header_text(),
             font=("Segoe UI", 20, "bold"),
             bg=THEME["header_bg"],
             fg=THEME["header_fg"],
-            pady=14
+            pady=14,
         )
         self.header.pack(fill="x")
 
-        self.canvas = tk.Canvas(
+        # Message label for instructions and errors
+        self.message = tk.Label(
             root,
-            width=self.cols * CELL,
-            height=self.rows * CELL,
+            text=HELP_TEXT,
+            font=("Segoe UI", 12),
             bg=THEME["bg"],
-            highlightthickness=0
+            fg="white",
         )
-        self.canvas.pack(pady=20)
+        self.message.pack()
 
+        # Frame keeps the maze centered
+        self.frame = tk.Frame(root, bg=THEME["bg"])
+        self.frame.pack(expand=True)
+
+        self.canvas = tk.Canvas(self.frame, bg=THEME["bg"], highlightthickness=0)
+        self.canvas.pack()
+
+        self.load_level()
         root.bind("<Key>", self.on_key)
         self.draw()
-        self.animate_walls()
 
     def header_text(self):
+        """Return level progress text."""
         marks = "✓" * self.completed + "·" * (len(LEVELS) - self.completed)
         return f"Level {self.level + 1} / {len(LEVELS)}   |   Completed: {marks}"
 
     def load_level(self):
+        """Load the current maze level."""
         self.grid = get_level(self.level)
         self.start, self.goal = find_start_and_goal(self.grid)
         self.player = self.start
-        self.path = []
-        self.rows, self.cols = len(self.grid), len(self.grid[0])
+        self.rows = len(self.grid)
+        self.cols = len(self.grid[0])
+        self.path.clear()
 
-    def play_beep(self, freq=700, dur=120):
+        self.header.config(text=self.header_text())
+        self.canvas.config(width=self.cols * CELL, height=self.rows * CELL)
+
+    def beep(self, freq=600, dur=100):
+        """Play a beep sound if supported."""
         if winsound:
             try:
                 winsound.Beep(freq, dur)
             except Exception:
                 pass
 
-    def draw_car(self, r, c, body, roof, facing):
+    def show_message(self, text, error=False):
+        """Show a temporary message."""
+        color = THEME["error"] if error else "white"
+        self.message.config(text=text, fg=color)
+        self.root.after(2500, lambda: self.message.config(text=HELP_TEXT, fg="white"))
+
+    def draw_cell(self, r, c, color):
+        """Draw one maze cell."""
+        x = c * CELL
+        y = r * CELL
+
+        self.canvas.create_rectangle(
+            x,
+            y,
+            x + CELL,
+            y + CELL,
+            fill=color,
+            outline="#0D1321",
+        )
+
+    def draw_path_dot(self, r, c):
+        """Draw one shortest-path marker."""
         x = c * CELL
         y = r * CELL
 
         self.canvas.create_oval(
-            x + 8, y + CELL - 14,
-            x + CELL - 8, y + CELL - 4,
-            fill=THEME['dark'], outline=""
+            x + 14,
+            y + 14,
+            x + CELL - 14,
+            y + CELL - 14,
+            fill=THEME["path"],
+            outline="",
         )
 
-        if facing == "w":
-            self.canvas.create_rectangle(x + 12, y + 6, x + CELL - 12, y + CELL - 6, fill=body, outline="")
-            self.canvas.create_polygon(x + 16, y + 10, x + CELL - 16, y + 10, x + CELL - 22, y + CELL // 2, x + 22, y + CELL // 2, fill=roof, outline="")
-        elif facing == "s":
-            self.canvas.create_rectangle(x + 12, y + 6, x + CELL - 12, y + CELL - 6, fill=body, outline="")
-            self.canvas.create_polygon(x + 16, y + CELL - 10, x + CELL - 16, y + CELL - 10, x + CELL - 22, y + CELL // 2, x + 22, y + CELL // 2, fill=roof, outline="")
-        elif facing == "a":
-            self.canvas.create_rectangle(x + 6, y + 12, x + CELL - 6, y + CELL - 12, fill=body, outline="")
-            self.canvas.create_polygon(x + 10, y + 16, x + 10, y + CELL - 16, x + CELL // 2, y + CELL - 22, x + CELL // 2, y + 22, fill=roof, outline="")
-        else:
-            self.canvas.create_rectangle(x + 6, y + 12, x + CELL - 6, y + CELL - 12, fill=body, outline="")
-            self.canvas.create_polygon(x + CELL - 10, y + 16, x + CELL - 10, y + CELL - 16, x + CELL // 2, y + CELL - 22, x + CELL // 2, y + 22, fill=roof, outline="")
+    def draw_car(self, r, c):
+        """Draw the player car."""
+        x = c * CELL
+        y = r * CELL
+
+        parts = [
+            ("oval", x + 8, y + CELL - 12, x + CELL - 8, y + CELL - 4, "#000000"),
+            ("rect", x + 7, y + 12, x + CELL - 7, y + CELL - 12, THEME["player"]),
+            ("rect", x + 14, y + 16, x + CELL - 14, y + CELL - 16, THEME["roof"]),
+        ]
+
+        for shape, x1, y1, x2, y2, color in parts:
+            draw = self.canvas.create_oval if shape == "oval" else self.canvas.create_rectangle
+            draw(x1, y1, x2, y2, fill=color, outline="", tags="player")
 
     def draw(self):
+        """Redraw the maze, path, and player."""
         self.canvas.delete("all")
 
-        for r in range(self.rows):
-            for c in range(self.cols):
-                cell = self.grid[r][c]
+        colors = {
+            "#": THEME["wall"],
+            "S": THEME["start"],
+            "G": THEME["goal"],
+        }
 
-                if cell == "#":
-                    color = mix_color(THEME["wall_base"], THEME["wall_glow"], self.wall_phase)
-                elif cell == "S":
-                    color = THEME["start"]
-                elif cell == "G":
-                    self.draw_car(r, c, THEME["goal"], "#ff8a80", "d")
-                    continue
-                else:
-                    color = THEME["floor"]
+        for r, row in enumerate(self.grid):
+            for c, cell in enumerate(row):
+                self.draw_cell(r, c, colors.get(cell, THEME["floor"]))
 
-                x1, y1 = c * CELL, r * CELL
-                x2, y2 = x1 + CELL, y1 + CELL
-
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="#0D1321", width=1)
-                self.canvas.create_rectangle(x1 + 3, y1 + 3, x2 - 3, y2 - 3, outline="#1f4068", width=1)
-
+        # Draw shortest path
         for r, c in self.path:
-            if (r, c) not in (self.start, self.goal):
-                self.canvas.create_oval(
-                    c * CELL + 14, r * CELL + 14,
-                    c * CELL + CELL - 14, r * CELL + CELL - 14,
-                    fill=THEME["path"],
-                    outline=""
-                )
+            if (r, c) not in {self.start, self.goal, self.player}:
+                self.draw_path_dot(r, c)
 
-        pr, pc = self.player
-        self.draw_car(int(pr), int(pc), THEME["player"], THEME["player_roof"], self.direction)
+        self.draw_car(*self.player)
 
-    def animate_move(self, old, new):
-        steps = 4
-        (r1, c1), (r2, c2) = old, new
+    def bump_wall(self, key):
+        """Shake the player when movement is blocked."""
+        self.beep(300, 80)
 
-        for i in range(1, steps + 1):
-            t = i / steps
-            r = r1 + (r2 - r1) * t
-            c = c1 + (c2 - c1) * t
-            self.player = (r, c)
-            self.draw()
+        dr, dc = MOVES[key]
+        for offset in (4, -4, 4, 0):
+            self.canvas.move("player", dc * offset, dr * offset)
             self.root.update()
-            time.sleep(0.005)
+            time.sleep(0.03)
 
-        self.player = new
-
-    def level_complete_flash(self):
-        self.play_beep(900, 150)
-        for _ in range(3):
-            self.canvas.configure(bg="#FFFFFF")
-            self.root.update()
-            time.sleep(0.05)
-            self.canvas.configure(bg=THEME["bg"])
-            self.root.update()
-            time.sleep(0.05)
-
-    def animate_walls(self):
-        self.wall_phase += 0.08
-        if self.wall_phase > 1.0:
-            self.wall_phase = 0.0
+        self.show_message("Movement blocked: wall or boundary detected.", True)
         self.draw()
-        self.root.after(120, self.animate_walls)
-
-    def on_key(self, event):
-        key = event.keysym.lower()
-        if key in "wasd":
-            self.direction = key
-            self.move(key)
-        if key == "p":
-            self.show_path()
 
     def move(self, key):
-        dr = {"w": -1, "s": 1}.get(key, 0)
-        dc = {"a": -1, "d": 1}.get(key, 0)
-        nr, nc = int(self.player[0] + dr), int(self.player[1] + dc)
+        """Move the player if the target cell is walkable."""
+        dr, dc = MOVES[key]
+        r, c = self.player
+        next_pos = (r + dr, c + dc)
 
-        if is_walkable(self.grid, nr, nc):
-            old = (int(self.player[0]), int(self.player[1]))
-            new = (nr, nc)
-            self.animate_move(old, new)
-            self.path = []
-            self.draw()
+        if not is_walkable(self.grid, *next_pos):
+            self.bump_wall(key)
+            return
 
-            if new == self.goal:
-                self.completed += 1
-                self.level_complete_flash()
-                self.next_level()
+        self.player = next_pos
+        self.path.clear()
+        self.draw()
+
+        if self.player == self.goal:
+            self.completed += 1
+            self.beep(900, 150)
+            self.next_level()
+
+    def show_path(self):
+        """Show the shortest path using pathfinding.py."""
+        self.path = find_path(self.grid, self.player, self.goal)
+
+        if not self.path:
+            self.show_message("No shortest path is available from this position.", True)
+            return
+
+        self.show_message("Shortest path displayed successfully.")
+        self.draw()
 
     def next_level(self):
+        """Load the next level or end the game."""
         self.level += 1
 
         if self.level >= len(LEVELS):
             self.header.config(text="🎉 ALL LEVELS COMPLETE 🎉")
+            self.show_message("Congratulations. You completed every level.")
             return
 
         self.load_level()
-        self.header.config(text=self.header_text())
-        self.canvas.config(width=self.cols * CELL, height=self.rows * CELL)
         self.draw()
 
-    def show_path(self):
-        start = (int(self.player[0]), int(self.player[1]))
-        self.path = find_path(self.grid, start, self.goal)
-        self.draw()
+    def on_key(self, event):
+        """Handle keyboard input."""
+        key = event.keysym.lower()
+
+        if key in MOVES:
+            self.move(key)
+        elif key == "p":
+            self.show_path()
+        elif key == "q":
+            self.root.destroy()
+        else:
+            self.show_message("Invalid key. Use W, A, S, D, P, or Q.", True)
 
 
 def main():
     root = tk.Tk()
     MazeGUI(root)
     root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
